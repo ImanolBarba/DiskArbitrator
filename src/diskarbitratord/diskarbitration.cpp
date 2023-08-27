@@ -197,6 +197,9 @@ const std::string mountDisk(DASessionRef session, diskarbitrator::Disk& disk, di
   std::future<std::string> errorFuture = errorPromise.get_future();
 
   DADiskRef diskRef = DADiskCreateFromBSDName(kCFAllocatorDefault, session, disk.disk().c_str());
+  if(diskRef == NULL) {
+    throw std::runtime_error("Unable to obtain disk reference");
+  }
   CFURLRef urlRef = NULL;
   CFStringRef pathCFStr = NULL;
 
@@ -232,20 +235,18 @@ const std::string mountDisk(DASessionRef session, diskarbitrator::Disk& disk, di
     throw std::runtime_error("Error mounting disk: " + error);
   }
 
-  if(!path.size()) {
-    // When the mount is on the default path of /Volumes, it is mounted 
-    // in a subfolder with the Volume Name. However, if the volume has no name,
-    // it is mounted in the first /Volumes/Untitled path available, appending
-    // numbers where necessary. The second best correct thing to return, since
-    // we cannot predict reliably where the mount will be, is to return the
-    // Volumes folder as mount point.
-    // TODO: Figure out how to retrieve the effective mountpoint after caling mount
-    return DEFAULT_MACOS_MOUNT_ROOT;
+  // Get DADisk reference again, in order to obtain the current mountpoint
+  diskRef = DADiskCreateFromBSDName(kCFAllocatorDefault, session, disk.disk().c_str());
+  if(diskRef == NULL) {
+    throw std::runtime_error("Unable to obtain disk reference after mount");
   }
+  std::shared_ptr<diskarbitrator::Disk> mountedDisk = genDisk(diskRef);
+  CFRelease(diskRef);
 
-  // TODO: Resolve absolute path
-
-  return path;
+  if(!mountedDisk->description().has_volume_path()) {
+    throw std::runtime_error("Disk has no mountpoint even after mount operation completed");
+  }
+  return mountedDisk->description().volume_path();
 }
 
 void unmountDisk(DASessionRef session, diskarbitrator::Disk& disk) {
@@ -517,7 +518,7 @@ std::shared_ptr<diskarbitrator::Disk> genDisk(DADiskRef& disk, DiskAbitratorServ
       }
     }
   }
-  
+
   CFRelease(desc);
 
   std::shared_ptr<diskarbitrator::Disk> diskPtr = std::shared_ptr<diskarbitrator::Disk>(d);
