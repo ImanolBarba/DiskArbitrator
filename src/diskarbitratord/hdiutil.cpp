@@ -18,6 +18,7 @@
  *                                                                         *
  ***************************************************************************/
 
+#include <mutex>
 #include <thread>
 
 #include <spawn.h>
@@ -56,7 +57,8 @@ typedef struct CommandOutput {
 // for attaching disks
 
 // Used to send stdin data to child
-void streamDataIn(int fd, const std::string* in, bool* err) {
+void streamDataIn(int fd, const std::string* in, std::mutex* mutex, bool* err) {
+  const std::lock_guard<std::mutex> lock(*mutex);
   size_t totalBytesWritten = 0;
   ssize_t bytesWritten = 0;
   while(totalBytesWritten != in->size()) {
@@ -73,7 +75,8 @@ void streamDataIn(int fd, const std::string* in, bool* err) {
 }
 
 // Used to read stdout/err data from child
-void streamDataOut(int fd, std::string* out, bool* err) {
+void streamDataOut(int fd, std::string* out, std::mutex* mutex, bool* err) {
+  const std::lock_guard<std::mutex> lock(*mutex);
   ssize_t bytesRead = 0;
   char buffer[READ_BUFFER_SIZE];
 
@@ -142,9 +145,13 @@ CommandOutput runHdiutil(const std::string& command, const std::string& image, s
   bool stdoutErr = false;
   bool stderrErr = false;
 
-  std::thread stdinThread(&streamDataIn, stdinPipeFds[1], &stdinData, &stdinErr);
-  std::thread stdoutThread(&streamDataOut, stdoutPipeFds[0], &stdoutData, &stdoutErr);
-  std::thread stderrThread(&streamDataOut, stderrPipeFds[0], &stderrData, &stderrErr);
+  std::mutex stdinMutex;
+  std::mutex stdoutMutex;
+  std::mutex stderrMutex;
+
+  std::thread stdinThread(&streamDataIn, stdinPipeFds[1], &stdinData, &stdinMutex, &stdinErr);
+  std::thread stdoutThread(&streamDataOut, stdoutPipeFds[0], &stdoutData, &stdoutMutex, &stdoutErr);
+  std::thread stderrThread(&streamDataOut, stderrPipeFds[0], &stderrData, &stderrMutex, &stderrErr);
 
   // Running these in joinable state is not a good idea. We'd need to use a
   // scope guard to ensure they are joined before the thread is destroyed, and
@@ -195,6 +202,23 @@ CommandOutput runHdiutil(const std::string& command, const std::string& image, s
     // Child exited due to signal. Return which one was it.
     co.retCode = WTERMSIG(status);  
   }
+
+  // Stronger guarantee that the threads have exhausted all input/output
+
+  close(stdinPipeFds[0]);
+  close(stdinPipeFds[1]);
+
+  close(stdoutPipeFds[0]);
+  close(stdoutPipeFds[1]);
+
+  close(stderrPipeFds[0]);
+  close(stderrPipeFds[1]);
+
+  const std::lock_guard<std::mutex> stdinLock(stdinMutex);
+  const std::lock_guard<std::mutex> stdoutLock(stdoutMutex);
+  const std::lock_guard<std::mutex> stderrLock(stderrMutex);
+
+  posix_spawn_file_actions_destroy(&fileActions);
 
   if(stdinErr || stdoutErr || stderrErr) {
     throw std::runtime_error("Error streaming data in/out child process");
