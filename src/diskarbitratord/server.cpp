@@ -99,7 +99,6 @@ void RunServer(const std::string& socketPath) {
   // if necessary
   if(!exitFlag) {
     LOG(WARNING) << "Server shutdown unexpectedly. Signaling server shutdown thread to terminate";
-    //close(pipeFD);
   } else {
     LOG(INFO) << "Server shutdown";
   }
