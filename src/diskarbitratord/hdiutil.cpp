@@ -231,7 +231,6 @@ bool imageHasSLA(const std::string& path, const std::string& password) {
 }
 
 std::vector<std::string> attachDisk(const std::string& path, diskarbitrator::MountMode mode, const std::string& password) {
-  // TODO: Add support for raw (dd) images
   std::vector<std::string> args;
   std::string stdinData;
 
