@@ -24,28 +24,25 @@
 
 bool exitFlag = false;
 
-// TODO: Experiment with sigwait(2) to see if we can even avoid signaling a thread at all.
-// Block reading a pipe, which is written to from the signal handler. If the
-// read completes, or is interrupted by something else than a signal, it
-// stops the server.
-void shutdownServer(std::shared_ptr<grpc::Server> server, int pipeFD) {
-  char msg[4];
-  while(!exitFlag) {
-    ssize_t bytes_read = read(pipeFD, &msg, 4);
-    if(bytes_read == -1) {
-      if(errno != EINTR) {
-        LOG(ERROR) << "Error reading from pipe: " << strerror(errno) << std::endl;
-        exitFlag = true;
-        break;
-      }
-    } else {
-      if(!strncmp(msg, "EXIT", 4)) {
-        LOG(INFO) << "Stopping server...";
-        exitFlag = true;
-      }
-    }
-  }
+// Block waiting for SIGINT/SIGTERM signals to be sent to the process, then terminate the server
+void shutdownServer(std::shared_ptr<grpc::Server> server) {
+  // Block SIGINT and SIGTERM from executing the default disposition (terminate)
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGINT);
+  sigaddset(&sigset, SIGTERM);
+  sigprocmask(SIG_BLOCK, &sigset, NULL);
   
+  // Wait until one of the signals is pending (generated but not delivered)
+  int sig;
+  if(sigwait(&sigset, &sig)) {
+    LOG(ERROR) << "Error calling sigwait: " << strerror(errno);
+  } else {
+    exitFlag = true;
+  }
+
+  // Kill the server
+  LOG(INFO) << "Stopping server...";
   server->Shutdown();  
 }
 
@@ -59,7 +56,7 @@ int openSocket(const std::string& socketPath) {
   return sockfd;
 }
 
-void RunServer(const std::string& socketPath, int pipeFD) {
+void RunServer(const std::string& socketPath) {
   // Service implementation, this has all the handlers for the gRPC calls
   DiskAbitratorServiceImpl service = DiskAbitratorServiceImpl();
   
@@ -92,7 +89,7 @@ void RunServer(const std::string& socketPath, int pipeFD) {
   }
 
   // Start the thread that is responsible for stopping the server
-  std::thread serverShutdownThread(&shutdownServer, server, pipeFD);
+  std::thread serverShutdownThread(&shutdownServer, server);
   LOG(INFO) << "Server listening on " << socketPath;
 
   // Block until shutdown
@@ -102,7 +99,7 @@ void RunServer(const std::string& socketPath, int pipeFD) {
   // if necessary
   if(!exitFlag) {
     LOG(WARNING) << "Server shutdown unexpectedly. Signaling server shutdown thread to terminate";
-    close(pipeFD);
+    //close(pipeFD);
   } else {
     LOG(INFO) << "Server shutdown";
   }

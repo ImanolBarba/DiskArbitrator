@@ -201,6 +201,6 @@ class DiskAbitratorServiceImpl final : public diskarbitrator::DiskArbitrator::Se
 };
 
 // Starts the server. What else?
-void RunServer(const std::string& socketPath, int pipeFD);
+void RunServer(const std::string& socketPath);
 
 #endif
