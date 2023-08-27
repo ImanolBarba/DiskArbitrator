@@ -517,6 +517,8 @@ std::shared_ptr<diskarbitrator::Disk> genDisk(DADiskRef& disk, DiskAbitratorServ
       }
     }
   }
+  
+  CFRelease(desc);
 
   std::shared_ptr<diskarbitrator::Disk> diskPtr = std::shared_ptr<diskarbitrator::Disk>(d);
 
@@ -546,8 +548,6 @@ std::shared_ptr<diskarbitrator::Disk> genDisk(DADiskRef& disk, DiskAbitratorServ
       CFRelease(parentRef);
     }
   }
-  
-  CFRelease(desc);
 
   return std::move(diskPtr);
 }

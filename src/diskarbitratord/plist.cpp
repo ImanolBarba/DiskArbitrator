@@ -19,6 +19,7 @@
  ***************************************************************************/
 
 #include "plist.hpp"
+#include "scope_guard.hpp"
 
 // Construct the main CFPropertyList object
 Plist::Plist(const std::string& data) {
@@ -26,19 +27,22 @@ Plist::Plist(const std::string& data) {
   if(plistStringCF == NULL) {
     throw std::runtime_error("Unable to create CF string with plist data");
   }
+  ScopeGuard freeStringGuard([plistStringCF]() {
+    CFRelease(plistStringCF);
+  });
 
   CFDataRef plistData = CFStringCreateExternalRepresentation(NULL, plistStringCF, kCFStringEncodingUTF8, 0);
   if(plistData == NULL) {
     throw std::runtime_error("Unable to encode plist data");
   }
+  ScopeGuard freePlistGuard([plistData]() {
+    CFRelease(plistData);
+  });
 
   this->plist = CFPropertyListCreateWithData(NULL, plistData, kCFPropertyListMutableContainersAndLeaves, NULL, NULL);
   if(this->plist == NULL) {
     throw std::runtime_error("Unable to parse plist");
   }
-      
-  CFRelease(plistData);
-  CFRelease(plistStringCF);
 }
 
 // Free the plist reference
@@ -51,6 +55,13 @@ Plist::~Plist() {
 // if the key doesn't exist
 PlistNode& Plist::operator[](const std::string& key) {
   CFStringRef keyCFStr = CFStringCreateWithCString(NULL, key.c_str(), kCFStringEncodingUTF8);
+  if(keyCFStr == NULL) {
+    throw std::runtime_error("Unable to create CF string with key");
+  }
+  ScopeGuard freeStringGuard([keyCFStr]() {
+    CFRelease(keyCFStr);
+  });
+  
   if(!CFDictionaryContainsKey((CFDictionaryRef)this->plist, keyCFStr)) {
     throw std::runtime_error("Key " + key + " not found");
   }
@@ -58,8 +69,6 @@ PlistNode& Plist::operator[](const std::string& key) {
   
   PlistNode* n = new PlistNode(value, key);
   this->generatedNodes.push_back(std::unique_ptr<PlistNode>(n));
-
-  CFRelease(keyCFStr);
 
   return *n;
 }
@@ -71,7 +80,15 @@ PlistNode& PlistNode::operator[](const std::string& key) {
   if (type != CFDictionaryGetTypeID()) {
     throw std::runtime_error("Key " + this->keyName + " is not a dictionary. Can't access nested key " + key);
   }
+  
   CFStringRef keyCFStr = CFStringCreateWithCString(NULL, key.c_str(), kCFStringEncodingUTF8);
+  if(keyCFStr == NULL) {
+    throw std::runtime_error("Unable to create CF string with key");
+  }
+  ScopeGuard freeStringGuard([keyCFStr]() {
+    CFRelease(keyCFStr);
+  });
+
   if(!CFDictionaryContainsKey((CFDictionaryRef)this->value, keyCFStr)) {
     throw std::runtime_error("Key " + key + " not found");
   }
@@ -79,8 +96,6 @@ PlistNode& PlistNode::operator[](const std::string& key) {
   
   PlistNode* n = new PlistNode(nestedValue, key);
   this->generatedNodes.push_back(std::unique_ptr<PlistNode>(n));
-
-  CFRelease(keyCFStr);
 
   return *n;
 }
