@@ -21,6 +21,7 @@
 #include <future>
 
 #include <sys/stat.h>
+#include <mach/mach_error.h>
 
 #include <DiskArbitration/DiskArbitration.h>
 
@@ -284,6 +285,7 @@ void checkSuccess(DADiskRef diskRef, DADissenterRef dissenterRef, void *context)
 			IOReturn system = err_get_system(status);
 			IOReturn subsystem = err_get_sub(status);
 			IOReturn code = err_get_code(status);
+
       if(system == ERR_KERN && subsystem == SUB_UNIX) {
         // (os/unix) error codes is errno codes
         errorString = "Error (errno: " + std::to_string(static_cast<int>(code)) + "): " + std::string(strerror(code));
@@ -292,8 +294,18 @@ void checkSuccess(DADiskRef diskRef, DADissenterRef dissenterRef, void *context)
         errorString = "Error (DA Error Code: " + std::to_string(static_cast<int>(code)) + "): " + genErrorDescription(code);
       } else {
         // anything else
-        // TODO: Find out if there's a reliable way to get string error values for the other kernel systems
-        errorString = "Unknown error (Code: " + std::to_string(static_cast<int>(status)) + "): System: " + std::to_string(static_cast<int>(system)) + ", Subsystem: " + std::to_string(static_cast<int>(subsystem)) + ", Code: " + std::to_string(static_cast<int>(code));
+        // This doesn't work everytime, but covers reasonably getting any other possible error descriptions:
+
+        std::string errMessage = "";
+        const char* errType = mach_error_type(status);
+        if(errType != NULL) {
+          errMessage += std::string(errType);
+        }
+        const char* errDesc = mach_error_string(status);
+        if(errDesc != NULL) {
+          errMessage += " " + std::string(errDesc);
+        }
+        errorString = "Unknown error (Code: " + std::to_string(static_cast<int>(status)) + "): System: " + std::to_string(static_cast<int>(system)) + ", Subsystem: " + std::to_string(static_cast<int>(subsystem)) + ", Code: " + std::to_string(static_cast<int>(code)) + " " + errMessage;
       }
     } else {
       std::string err = CFStrToStr(statusCFStr);
