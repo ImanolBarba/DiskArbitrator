@@ -51,7 +51,7 @@ message DiskInfoInput {
   string disk = 1;
 }
 
-// Some of these fields will be present on some disks, some wont'. Apple's
+// Some of these fields will be present on some disks, some won't. Apple's
 // documentation doesn't say which ones, only mentions a couple and even then
 // it's incorrect. So I'm treating everything as optional except the BSD name
 // which I'm confident will be shown everywhere since we're filtering out
