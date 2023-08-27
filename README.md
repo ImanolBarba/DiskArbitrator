@@ -21,6 +21,12 @@ This project is a reimplementation of https://github.com/aburgh/Disk-Arbitrator.
 # Requirements
 - macOS/OSX 10.5 or later
 
+# Downloads
+// TODO
+
+# Building
+// TODO
+
 # Usage
 // TODO
 
