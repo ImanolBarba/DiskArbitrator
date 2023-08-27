@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package diskarbitrator;
+
+enum MountMode {
+  MOUNT_NONE = 0;
+  MOUNT_RDWR = 1;
+  MOUNT_RDONLY = 2;
+}
+
+enum ArbitrationMode {
+  ARBITRATOR_NONE = 0;
+  ARBITRATOR_RDONLY = 1;
+  ARBITRATOR_BLOCK = 2;
+}
+
+// MountDisk
+message MountDiskInput {
+  string disk = 1;
+  MountMode mode = 2;
+  optional string path = 3;
+  repeated string arguments = 4;
+}
+message MountDiskOutput {
+  string path = 1;
+}
+
+// UnmountDisk
+message UnmountDiskInput {
+  string disk = 1;
+}
+
+// EjectDisk
+message EjectDiskInput {
+  string disk = 1;
+}
+
+// AttachDisk
+message AttachDiskInput {
+  string disk = 1;
+  MountMode mode = 2;
+}
+message AttachDiskOutput {
+  repeated string disks = 1;
+}
+
+// DiskInfo
+message DiskInfoInput {
+  string disk = 1;
+}
+
+// Some of these fields will be present on some disks, some wont'. Apple's
+// documentation doesn't say which ones, only mentions a couple and even then
+// it's incorrect. So I'm treating everything as optional except the BSD name
+// which I'm confident will be shown everywhere since we're filtering out
+// network devices. Current data model depends on it anyway
+message DiskDescription {
+  uint64 appearance_time           = 1;  // Undocumented field. Internally converted to epoch
+  string media_bsd_name            = 2;  /* ( CFString     ) */
+  map<string,string> media_icon    = 15; /* ( CFDictionary ) */
+  optional string volume_kind      = 3;  /* ( CFString     ) */
+  optional bool volume_mountable   = 4;  /* ( CFBoolean    ) */
+  optional string volume_name      = 5;  /* ( CFString     ) */
+  optional bool volume_network     = 6;  /* ( CFBoolean    ) */
+  optional string volume_path      = 7;  /* ( CFURL        ) */
+  optional string volume_uuid      = 8;  /* ( CFUUID       ) */
+  optional uint64 media_block_size = 9;  /* ( CFNumber     ) */
+  optional uint64 media_bsd_major  = 10; /* ( CFNumber     ) */
+  optional uint64 media_bsd_minor  = 11; /* ( CFNumber     ) */
+  optional uint64 media_bsd_unit   = 12; /* ( CFNumber     ) */
+  optional string media_content    = 13; /* ( CFString     ) */
+  optional bool media_ejectable    = 14; /* ( CFBoolean    ) */
+  optional string media_kind       = 16; /* ( CFString     ) */
+  optional bool media_leaf         = 17; /* ( CFBoolean    ) */
+  optional string media_name       = 18; /* ( CFString     ) */
+  optional string media_path       = 19; /* ( CFString     ) */
+  optional bool media_removable    = 20; /* ( CFBoolean    ) */
+  optional uint64 media_size       = 21; /* ( CFNumber     ) */
+  optional string media_type       = 22; /* ( CFString     ) */
+  optional string media_uuid       = 23; /* ( CFUUID       ) */
+  optional bool media_whole        = 24; /* ( CFBoolean    ) */
+  optional bool media_writable     = 25; /* ( CFBoolean    ) */
+  optional string device_guid      = 26; /* ( CFData       ) */
+  optional bool device_internal    = 27; /* ( CFBoolean    ) */
+  optional string device_model     = 28; /* ( CFString     ) */
+  optional string device_path      = 29; /* ( CFString     ) */
+  optional string device_protocol  = 30; /* ( CFString     ) */
+  optional string device_revision  = 31; /* ( CFString     ) */
+  optional uint64 device_unit      = 32; /* ( CFNumber     ) */
+  optional string device_vendor    = 33; /* ( CFString     ) */
+  optional string bus_name         = 34; /* ( CFString     ) */
+  optional string bus_path         = 35; /* ( CFString     ) */
+}
+
+// ListDisks
+message Disk {
+  string disk = 1;
+  string parent_disk = 2;
+  repeated string children = 3;
+  DiskDescription description = 4;
+}
+message ListDisksOutput {
+  repeated Disk disks = 1;
+}
+
+// Arbitrate
+message ArbitrateInput {
+  ArbitrationMode mode = 1;
+}
+
+service DiskArbitrator {
+  rpc MountDisk (MountDiskInput) returns (MountDiskOutput) {}
+  rpc UnmountDisk (UnmountDiskInput) returns (google.protobuf.Empty) {}
+  rpc EjectDisk (EjectDiskInput) returns (google.protobuf.Empty) {}
+  rpc AttachDisk (AttachDiskInput) returns (AttachDiskOutput) {}
+  rpc DiskInfo (DiskInfoInput) returns (DiskDescription) {}
+  rpc ListDisks (google.protobuf.Empty) returns (ListDisksOutput) {}
+  rpc Arbitrate (ArbitrateInput) returns (google.protobuf.Empty) {}
+}
