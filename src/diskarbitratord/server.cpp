@@ -52,10 +52,12 @@ void shutdownServer(std::shared_ptr<grpc::Server> server) {
 // Open the UNIX domain socket for communicating with clients
 int openSocket(const std::string& socketPath) {
   std::filesystem::path parentPath = std::filesystem::path(socketPath).parent_path();
-  bool result = std::filesystem::create_directories(parentPath);
-  if(!result) {
-    LOG(ERROR) << "Unable to create directories for socket";
-    return -1;
+  if(!std::filesystem::exists(parentPath)) {
+    bool result = std::filesystem::create_directories(parentPath);
+    if(!result) {
+      LOG(ERROR) << "Unable to create directories for socket";
+      return -1;
+    }
   }
   int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
   if(sockfd == -1) {
