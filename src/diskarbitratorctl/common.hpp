@@ -28,5 +28,6 @@ bool validateMountMode(const std::string& mode);
 bool validateArbitrationMode(const std::string& mode);
 std::string sizeToHuman(uint64_t size);
 std::string unixTimeToString(uint64_t ts);
+std::wstring strToWstr(const std::string& str);
 
 #endif

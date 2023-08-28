@@ -56,3 +56,7 @@ std::string unixTimeToString(uint64_t ts) {
   ss << std::put_time(t, "%F %T %z");
   return std::move(ss.str());
 }
+
+std::wstring strToWstr(const std::string& str) {
+  return std::move(std::wstring(str.begin(), str.end()));
+}

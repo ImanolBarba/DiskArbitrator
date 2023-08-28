@@ -19,6 +19,9 @@
  ***************************************************************************/
 
 
+#include <codecvt>
+#include <locale>
+
 #include <cxxopts.hpp>
 
 #include "diskarbitrator.grpc.pb.h"
@@ -30,7 +33,7 @@
 #define COLUMN_SEPARATION 2
 #define DECIMAL_PLACES 2
 
-std::map<std::string, size_t> getColumnWidths(std::vector<std::map<std::string, std::string>>& values) {
+std::map<std::string, size_t> getColumnWidths(std::vector<std::map<std::string, std::wstring>>& values) {
   std::map<std::string, size_t> colWidths;
   std::vector<std::string> colNames;
 
@@ -54,19 +57,19 @@ std::map<std::string, size_t> getColumnWidths(std::vector<std::map<std::string, 
   return std::move(colWidths);
 }
 
-void printValue(std::map<std::string, size_t>& colWidths, const std::string& col, const std::string& val, bool alignRight = false) {
+void printValue(std::map<std::string, size_t>& colWidths, const std::string& col, const std::wstring& val, bool alignRight = false) {
   if(!alignRight) {
-    std::cout << val;
+    std::wcout << val;
     for(unsigned int i = val.size(); i < (colWidths[col] + COLUMN_SEPARATION); ++i) {
-      std::cout << " ";
+      std::wcout << L" ";
     }
   } else {
     for(unsigned int i = val.size(); i < (colWidths[col]); ++i) {
-      std::cout << " ";
+      std::wcout << L" ";
     }
-    std::cout << val;
+    std::wcout << val;
     for(unsigned int i = 0; i < COLUMN_SEPARATION; ++i) {
-      std::cout << " ";
+      std::wcout << L" ";
     }
   }
 }
@@ -108,45 +111,48 @@ void printDiskList(std::vector<diskarbitrator::Disk>& disks) {
   std::vector<diskarbitrator::Disk> orderedDisks = orderDisks(disks);
 
   // put values in columns
-  std::vector<std::map<std::string, std::string>> values;
+  std::vector<std::map<std::string, std::wstring>> values;
   for(unsigned int i = 0; i < orderedDisks.size(); ++i) {
-    std::map<std::string, std::string> diskValuesMap;
+    std::map<std::string, std::wstring> diskValuesMap;
 
     // Extra chars for hierarchy tree view
-    std::string prefix;
+    std::wstring prefix;
     if(orderedDisks[i].description().media_whole()) {
-      prefix = "";
+      prefix = L"";
     } else {
       if(i == (orderedDisks.size() - 1) || orderedDisks[i+1].parent_disk() != orderedDisks[i].parent_disk()) {
-        // TODO: Using the fancy unicode symbols like ├─disk4 causes some real issues with calculation of column length. I'll fix it eventually
-        prefix = "\\_";
+        prefix = L"└─";
       } else {
-        prefix = "|-";
+        prefix = L"├─";
       }
     }
-    diskValuesMap["DISK"] = prefix + orderedDisks[i].disk();
-    diskValuesMap["NAME"] = orderedDisks[i].description().volume_name();
-    diskValuesMap["RM"] = orderedDisks[i].description().media_removable() ? "1" : "0";
-    diskValuesMap["SIZE"] = sizeToHuman(orderedDisks[i].description().media_size());
-    diskValuesMap["RO"] = orderedDisks[i].description().media_writable() ? "0" : "1";
-    diskValuesMap["TYPE"] = orderedDisks[i].description().media_whole() ? "disk" : "part";
-    diskValuesMap["FS"] = orderedDisks[i].description().volume_kind();
-    diskValuesMap["MOUNT"] = orderedDisks[i].description().volume_path();
+    diskValuesMap["DISK"] = prefix + strToWstr(orderedDisks[i].disk());
+    diskValuesMap["NAME"] = strToWstr(orderedDisks[i].description().volume_name());
+    diskValuesMap["RM"] = strToWstr(orderedDisks[i].description().media_removable() ? "1" : "0");
+    diskValuesMap["SIZE"] = strToWstr(sizeToHuman(orderedDisks[i].description().media_size()));
+    diskValuesMap["RO"] = strToWstr(orderedDisks[i].description().media_writable() ? "0" : "1");
+    diskValuesMap["TYPE"] = strToWstr(orderedDisks[i].description().media_whole() ? "disk" : "part");
+    diskValuesMap["FS"] = strToWstr(orderedDisks[i].description().volume_kind());
+    diskValuesMap["MOUNT"] = strToWstr(orderedDisks[i].description().volume_path());
     values.push_back(diskValuesMap);
   }
 
   // get column widths
   std::map<std::string, size_t> colWidths = getColumnWidths(values);
 
+  // FIXME: codecvt is deprecated, but there is no suitable replacement in STL, and I don't want to make 2 lines of code into a huge mess with iconv
+  std::locale utf8(std::locale(), new std::codecvt_utf8_utf16<wchar_t> );
+  std::wcout.imbue(utf8);
+
   // print header
-  printValue(colWidths, "DISK", "DISK");
-  printValue(colWidths, "NAME", "NAME");
-  printValue(colWidths, "RM", "RM");
-  printValue(colWidths, "SIZE", "SIZE");
-  printValue(colWidths, "RO", "RO");
-  printValue(colWidths, "TYPE", "TYPE");
-  printValue(colWidths, "FS", "FS");
-  printValue(colWidths, "MOUNT", "MOUNT");
+  printValue(colWidths, "DISK", L"DISK");
+  printValue(colWidths, "NAME", L"NAME");
+  printValue(colWidths, "RM", L"RM");
+  printValue(colWidths, "SIZE", L"SIZE");
+  printValue(colWidths, "RO", L"RO");
+  printValue(colWidths, "TYPE", L"TYPE");
+  printValue(colWidths, "FS", L"FS");
+  printValue(colWidths, "MOUNT", L"MOUNT");
   std::cout << std::endl;
 
   // print disks
