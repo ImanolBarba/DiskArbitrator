@@ -18,10 +18,10 @@
  *                                                                         *
  ***************************************************************************/
 
-#include <filesystem>
-
+#include <libgen.h>
 #include <sys/syslimits.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 #include "server.hpp"
 
@@ -35,7 +35,7 @@ void shutdownServer(std::shared_ptr<grpc::Server> server) {
   sigaddset(&sigset, SIGINT);
   sigaddset(&sigset, SIGTERM);
   sigprocmask(SIG_BLOCK, &sigset, NULL);
-  
+
   // Wait until one of the signals is pending (generated but not delivered)
   int sig;
   if(sigwait(&sigset, &sig)) {
@@ -46,22 +46,40 @@ void shutdownServer(std::shared_ptr<grpc::Server> server) {
 
   // Kill the server
   LOG(INFO) << "Stopping server...";
-  server->Shutdown();  
+  server->Shutdown();
 }
+
+int mkpath(const std::string& dir, mode_t mode) {
+  if(dir == "/") {
+    return 0;
+  }
+
+  int res = mkpath(std::string(dirname(const_cast<char*>(dir.c_str()))), mode);
+  if(res) {
+    // Propagate the error and abort
+    return 1;
+  }
+
+  res = mkdir(dir.c_str(), mode);
+  if(res && errno != EEXIST) {
+    return res;
+  }
+  return 0;
+}
+
 
 // Open the UNIX domain socket for communicating with clients
 int openSocket(const std::string& socketPath) {
-  std::filesystem::path parentPath = std::filesystem::path(socketPath).parent_path();
-  if(!std::filesystem::exists(parentPath)) {
-    bool result = std::filesystem::create_directories(parentPath);
-    if(!result) {
-      LOG(ERROR) << "Unable to create directories for socket";
-      return -1;
-    }
+  // This whole mess is to avoid alloc/free
+  std::string dirpath = std::string(dirname(const_cast<char*>(socketPath.c_str())));
+  if(mkpath(dirpath.c_str(), 0755)) {
+    LOG(ERROR) << "Unable to create socket directory " << dirpath;
+    return -1;
   }
+
   int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
   if(sockfd == -1) {
-    LOG(ERROR) << "Unable to open socket: " << strerror(errno) << std::endl;
+    LOG(ERROR) << "Unable to open socket: " << strerror(errno);
   }
 
   return sockfd;
@@ -70,7 +88,7 @@ int openSocket(const std::string& socketPath) {
 void RunServer(const std::string& socketPath) {
   // Service implementation, this has all the handlers for the gRPC calls
   DiskAbitratorServiceImpl service = DiskAbitratorServiceImpl();
-  
+
   // Before we start the server, we can start processing DiskArbitration
   // framework callbacks for the disks currently in the system.
   if(!service.StartArbitration()) {
