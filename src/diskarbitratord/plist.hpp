@@ -22,13 +22,13 @@
 #define PLIST_HPP_
 
 #include <string>
+#include <vector>
 
 #include <CoreFoundation/CoreFoundation.h>
 
 // Simple plist abstraction class. There's no fancy templating here: all types
 // are returned as strings and it's the caller that will have to convert that
 // to whichever type they want.
-// TODO: Actually implement the fancy templating
 
 // Every element of the Plist structure is considered a Plist node, with this
 // you can:
@@ -44,7 +44,11 @@ class PlistNode {
     PlistNode& operator[](const std::string& key);
     PlistNode& operator[](unsigned int i);
     size_t size();
-    operator std::string() const;
+
+    template<typename T>
+    T get() {
+      return this->get<T>();
+    }
 
   private:
     std::vector<std::unique_ptr<PlistNode>> generatedNodes;
@@ -54,7 +58,7 @@ class PlistNode {
 
 // The plist wrapper. Accessing one of its elements returns a PlistNode object.
 // An example for using this would be:
-// const std::string value = plist["keyName"]["nestedKeyName"][4]
+// const T value = plist["keyName"]["nestedKeyName"][4].get<T>();
 // This would be accessing key "keyName", which would be a CFDictionary, then
 // its "nestedKeyName", which would be an array, and finally position 4 of
 // that array. The value is converted to a string if supported, otherwise it

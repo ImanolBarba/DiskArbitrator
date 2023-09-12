@@ -238,8 +238,8 @@ bool isImageEncrypted(const std::string& path) {
   }
 	
   std::unique_ptr<Plist> pl = std::unique_ptr<Plist>(new Plist(output.stdout));
-  const std::string value = (*pl)["encrypted"];
-  return value == "true";
+  bool value = (*pl)["encrypted"].get<bool>();
+  return value;
 }
 
 // Returns true if the image has a Software License Agreement attached.
@@ -250,8 +250,8 @@ bool imageHasSLA(const std::string& path, const std::string& password) {
   }
 	
   std::unique_ptr<Plist> pl = std::unique_ptr<Plist>(new Plist(output.stdout));
-  const std::string value = (*pl)["Properties"]["Software License Agreement"];
-  return value == "true";
+  bool value = (*pl)["Properties"]["Software License Agreement"].get<bool>();
+  return value;
 }
 
 std::vector<std::string> attachDisk(const std::string& path, diskarbitrator::MountMode mode, const std::string& password) {
@@ -291,7 +291,7 @@ std::vector<std::string> attachDisk(const std::string& path, diskarbitrator::Mou
 	std::unique_ptr<Plist> pl = std::unique_ptr<Plist>(new Plist(output.stdout));
   
   for(unsigned int i = 0; i < (*pl)["system-entities"].size(); ++i) {
-    const std::string devEntry = (*pl)["system-entities"][i]["dev-entry"];
+    const std::string devEntry = (*pl)["system-entities"][i]["dev-entry"].get<std::string>();
     disks.push_back(devEntry);
   }
 

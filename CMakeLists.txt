@@ -7,6 +7,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-declarations")
 
 add_subdirectory(proto)
 
+find_package(Protobuf REQUIRED)
 find_package(glog REQUIRED)
 find_package(gRPC REQUIRED)
 find_package(cxxopts REQUIRED)

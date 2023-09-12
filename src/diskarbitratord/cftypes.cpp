@@ -20,7 +20,7 @@
 
 #include <iomanip>
 #include <sstream>
-
+#include <vector>
 #include <sys/syslimits.h>
 
 #include "cftypes.hpp"

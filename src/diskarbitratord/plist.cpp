@@ -100,29 +100,6 @@ PlistNode& PlistNode::operator[](const std::string& key) {
   return *n;
 }
 
-// Converts the value to string representation
-PlistNode::operator std::string() const {
-  std::string strValue = "";
-
-  CFTypeID type = CFGetTypeID(this->value);
-  if(type == CFStringGetTypeID()) {
-    strValue = std::string(CFStringGetCStringPtr((CFStringRef)this->value, kCFStringEncodingUTF8));
-  } else if(type == CFNumberGetTypeID()) {
-    int intValue;
-    CFNumberGetValue((CFNumberRef)this->value, kCFNumberIntType, &intValue);
-    strValue = std::to_string(intValue);
-  } else if(type == CFBooleanGetTypeID()) {
-    strValue = "false";
-    if(CFBooleanGetValue((CFBooleanRef)this->value)) {
-      strValue = "true";
-    }
-  } else {
-    throw std::invalid_argument("Unsupported type");
-  }
-
-  return strValue;
-}
-
 // TODO: Maybe support negative indexes? Not really useful here...
 // Access the value in index i if the node's value is a CFArray. Throws an 
 // exception if the index is out of bounds
@@ -153,3 +130,50 @@ size_t PlistNode::size() {
   CFIndex len = CFArrayGetCount((CFArrayRef)this->value);
   return (size_t)len;
 }
+
+template<>
+std::string PlistNode::get() {
+  std::string strValue = "";
+
+  CFTypeID type = CFGetTypeID(this->value);
+  if(type == CFStringGetTypeID()) {
+    strValue = std::string(CFStringGetCStringPtr((CFStringRef)this->value, kCFStringEncodingUTF8));
+  } else if(type == CFNumberGetTypeID()) {
+    int intValue;
+    CFNumberGetValue((CFNumberRef)this->value, kCFNumberIntType, &intValue);
+    strValue = std::to_string(intValue);
+  } else if(type == CFBooleanGetTypeID()) {
+    strValue = "false";
+    if(CFBooleanGetValue((CFBooleanRef)this->value)) {
+      strValue = "true";
+    }
+  } else {
+    throw std::invalid_argument("Unsupported type");
+  }
+
+  return strValue;
+}
+
+template<>
+bool PlistNode::get() {
+  bool value = false;
+
+  CFTypeID type = CFGetTypeID(this->value);
+  if(type == CFNumberGetTypeID()) {
+    int intValue;
+    CFNumberGetValue((CFNumberRef)this->value, kCFNumberIntType, &intValue);
+    if(intValue) {
+      value = true;
+    }
+  } else if(type == CFBooleanGetTypeID()) {
+    if(CFBooleanGetValue((CFBooleanRef)this->value)) {
+      value = true;
+    }
+  } else {
+    throw std::invalid_argument("Unsupported type");
+  }
+  
+  return value;
+}
+
+// If you need more template specialisations, add them here
