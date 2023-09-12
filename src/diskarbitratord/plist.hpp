@@ -42,7 +42,7 @@ class PlistNode {
   public:
     PlistNode(CFTypeRef& v, const std::string& key) : value(v), keyName(key) {};
     PlistNode& operator[](const std::string& key);
-    PlistNode& operator[](unsigned int i);
+    PlistNode& operator[](long long int i);
     size_t size();
 
     template<typename T>

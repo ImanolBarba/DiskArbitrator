@@ -100,13 +100,17 @@ PlistNode& PlistNode::operator[](const std::string& key) {
   return *n;
 }
 
-// TODO: Maybe support negative indexes? Not really useful here...
 // Access the value in index i if the node's value is a CFArray. Throws an 
 // exception if the index is out of bounds
-PlistNode& PlistNode::operator[](unsigned int i) {
+PlistNode& PlistNode::operator[](long long int i) {
   CFTypeID type = CFGetTypeID(this->value);
   if (type != CFArrayGetTypeID()) {
     throw std::runtime_error("Key " + this->keyName + " is not a list. Can't access elements");
+  }
+
+  if(i < 0) {
+    // If the index is negative, it means we want the n-th position starting from the back
+    i += this->size();
   }
 
   if(this->size() < i) {
