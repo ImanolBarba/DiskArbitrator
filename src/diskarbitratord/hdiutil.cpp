@@ -29,16 +29,22 @@
 #include "plist.hpp"
 #include "scope_guard.hpp"
 
-
 #define HDIUTIL_PATH "/usr/bin/hdiutil"
 // Strategically, this is the same size as the pipe buffer in XNU kernel
-#define READ_BUFFER_SIZE 16384 
+#define READ_BUFFER_SIZE 16384
+#define EXECUTION_TIMEOUT_SECS 10
 
 typedef struct CommandOutput {
   int retCode;
   std::string stdout;
   std::string stderr;
 } CommandOutput;
+
+static int terminationPipe[2];
+
+void terminationHandler(int signal) {
+  write(terminationPipe[1], "", 1);
+}
 
 // Let's talk about hdiutil for a minute.
 // Despite my absolute hatred for using CLI tools from code, having to deal
@@ -91,6 +97,25 @@ void streamDataOut(int fd, std::string* out, std::mutex* mutex, bool* err) {
   }
   close(fd);
 }
+
+int getChildExitCode(pid_t childPid) {
+  int status;
+  int exitCode = -1;
+  while(waitpid(childPid, &status, 0) == -1) {
+    if(errno != EINTR) {
+      throw std::runtime_error("Error waiting for child process PID: " + std::string(strerror(errno)));
+    }
+  }
+  if (WIFEXITED(status)) {
+    exitCode = WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    // Child exited due to signal. Return which one was it.
+    exitCode = WTERMSIG(status);
+  }
+
+  return exitCode;
+}
+
 
 // Just the typical fork/exec wrap. Since vfork is deprecated in macOS, we're
 // using posix_spawn, since it also avoids duplicating process memory.
@@ -185,24 +210,60 @@ CommandOutput runHdiutil(const std::string& command, const std::string& image, s
   // Push final NULL string
   argv.push_back(NULL);
 
+  // Set up execution timeout
+  if (pipe(terminationPipe) == -1) {
+    throw std::runtime_error("Error setting up timeout execution pipe: " + std::string(strerror(errno)));  
+  }
+  ScopeGuard terminationPipeGuard([]() {
+    close(terminationPipe[0]);
+    close(terminationPipe[1]);
+  });
+
+  static struct sigaction action;
+  memset(&action, 0, sizeof(action));
+  action.sa_handler = terminationHandler;
+  action.sa_flags = SA_RESETHAND;
+  sigaction(SIGCHLD, &action, NULL);
+
   if(posix_spawn(&childPid, HDIUTIL_PATH, &fileActions, NULL, (char* const*) argv.data(), NULL) != 0) {
     throw std::runtime_error("Unable to spawn child hdiutil process: " + std::string(strerror(errno)));
   }
-  
-  // get exit code
-  int status;
-  while(waitpid(childPid, &status, 0) == -1) {
-    if(errno != EINTR) {
-      throw std::runtime_error("Error waiting for child process PID: " + std::string(strerror(errno)));
+
+  char c;
+
+  struct timeval tv;
+  tv.tv_sec = EXECUTION_TIMEOUT_SECS;
+  tv.tv_usec = 0;
+
+  fd_set fds;
+  FD_ZERO(&fds);
+  FD_SET(terminationPipe[0], &fds);
+
+  int ret = select(terminationPipe[0] + 1, &fds, NULL, NULL, &tv);
+  if(ret > 0) {
+    // Termination event ocurred
+    read(terminationPipe[0], &c, 1);
+  } else {
+    // Execution timeout reached or select(2) failed. Terminate execution in any case.
+    if(ret < 0) {
+      // select(2) failed. Don't throw here because we need to kill the child process
+      LOG(ERROR) << "Unable to wait for execution timeout: " + std::string(strerror(errno));  
+    } else {
+      LOG(ERROR) << "Execution timeout reached for hdiutil (PID " + std::to_string(childPid) + "). Terminating child process...";
+    }
+    // Reset signal handler
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = SIG_DFL;
+    sigaction(SIGCHLD, &action, NULL);
+
+    if(kill(childPid, SIGKILL)) {
+      throw std::runtime_error("Error sending SIGKILL to child PID " + std::to_string(childPid) + ": " + std::string(strerror(errno)));
     }
   }
-  if (WIFEXITED(status)) {
-    co.retCode = WEXITSTATUS(status);
-  } else if (WIFSIGNALED(status)) {
-    // Child exited due to signal. Return which one was it.
-    co.retCode = WTERMSIG(status);  
-  }
 
+  // Get exit code or reap child process in any case
+  co.retCode = getChildExitCode(childPid);
+  
   // Stronger guarantee that the threads have exhausted all input/output
 
   close(stdinPipeFds[0]);
@@ -281,7 +342,6 @@ std::vector<std::string> attachDisk(const std::string& path, diskarbitrator::Mou
     args.push_back("-readonly");
   }
 
-  // TODO: Implement execution timeout in case it gets stuck
   CommandOutput output = runHdiutil("attach", path, args, stdinData);
   if(output.retCode) {
     throw std::runtime_error("hdiutil returned: " + std::to_string(output.retCode) + ". Error: " + output.stderr);
